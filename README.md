@@ -1,7 +1,7 @@
 # String Scan
 A simple string matching library suitable as a lightweight alternative
-to regex.  Supports multiple string encoding formats including UTF-8,
-UTF-16, UTF-32, and raw bytes.
+to regex.  Supports matching against raw byte strings as well as UTF-8
+encoded character strings.
 
 The root level contents of a string are taken as plain text, and matched
 literally against the input string.  For example:

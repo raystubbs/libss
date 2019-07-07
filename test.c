@@ -6,15 +6,19 @@
 #include <stdbool.h>
 
 static bool testMatch( ss_Context* ctx, ss_Format fmt, char const* p, char const* s ) {
-    ss_Pattern* pat = ss_compile( ctx, fmt, p, strlen( p ) );
+    ss_Pattern* pat         = NULL;
+    ss_Scanner* scanner     = NULL;
+    ss_Match*   match       = NULL;
+    
+    pat = ss_compile( ctx, fmt, p, strlen( p ) );
     if( ss_error( ctx ) )
         goto fail;
     
-    ss_Scanner* scanner = ss_start( ctx, fmt, pat, s, strlen( s ) );
+    scanner = ss_start( ctx, fmt, pat, s, strlen( s ) );
     if( ss_error( ctx ) )
         goto fail;
     
-    ss_Match* match = ss_match( scanner );
+    match = ss_match( scanner );
     if( !match )
         goto fail;
     
@@ -194,22 +198,29 @@ static bool test11( void ) {
 static bool test12( void ) {
     ss_Context* ctx = ss_init();
     
-    char const* p = "I have two ( 'apples' | 'oranges' ):fruit.";
+    char const* p = "I have two ( 'apples':apples | 'oranges':oranges ):fruit.";
     char const* s = "I have two apples.";
     
-    ss_Pattern* pat = ss_compile( ctx, ss_BYTES, p, strlen( p ) );
+    ss_Pattern* pat         = NULL;
+    ss_Scanner* scanner     = NULL;
+    ss_Match*   match       = NULL;
+    ss_Match*   fruit       = NULL;
+    ss_Match*   apples      = NULL;
+    ss_Match*   oranges     = NULL;
+    
+    pat = ss_compile( ctx, ss_BYTES, p, strlen( p ) );
     if( ss_error( ctx ) )
         goto fail;
     
-    ss_Scanner* scanner = ss_start( ctx, ss_BYTES, pat, s, strlen( s ) );
+    scanner = ss_start( ctx, ss_BYTES, pat, s, strlen( s ) );
     if( ss_error( ctx ) )
         goto fail;
     
-    ss_Match* match = ss_match( scanner );
+    match = ss_match( scanner );
     if( !match )
         goto fail;
     
-    ss_Match* fruit = ss_get( match, "fruit" );
+    fruit = ss_get( match, "fruit" );
     if( !fruit )
         goto fail;
     if( ss_loc( fruit ) != s + 11 )
@@ -217,6 +228,15 @@ static bool test12( void ) {
     if( ss_end( fruit ) != s + 17 )
         goto fail;
     
+    apples = ss_get( fruit, "apples" );
+    if( !apples )
+        goto fail;
+    
+    oranges = ss_get( fruit, "oranges" );
+    if( oranges )
+        goto fail;
+    
+    ss_release( apples );
     ss_release( fruit );
     ss_release( scanner );
     ss_release( match );
@@ -225,6 +245,10 @@ static bool test12( void ) {
     return true;
 
 fail:
+    if( apples )
+        ss_release( apples );
+    if( oranges )
+        ss_release( oranges );
     if( fruit )
         ss_release( fruit );
     if( scanner )
@@ -243,15 +267,19 @@ static bool test13( void ) {
     char const* p = "( 'apple' | 'orange' | 'pear' )";
     char const* s = "I ate an apple.";
     
-    ss_Pattern* pat = ss_compile( ctx, ss_BYTES, p, strlen( p ) );
+    ss_Pattern* pat         = NULL;
+    ss_Scanner* scanner     = NULL;
+    ss_Match*   match       = NULL;
+    
+    pat = ss_compile( ctx, ss_BYTES, p, strlen( p ) );
     if( ss_error( ctx ) )
         goto fail;
     
-    ss_Scanner* scanner = ss_start( ctx, ss_BYTES, pat, s, strlen( s ) );
+    scanner = ss_start( ctx, ss_BYTES, pat, s, strlen( s ) );
     if( ss_error( ctx ) )
         goto fail;
     
-    ss_Match* match = ss_find( scanner );
+    match = ss_find( scanner );
     if( !match )
         goto fail;
     if( ss_loc( match ) != s + 9 )

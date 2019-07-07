@@ -1374,6 +1374,9 @@ static ss_Match* literalMatcher( ss_Pattern* p, ss_Map* scope, ss_Stream* stream
     match->next  = NULL;
     match->loc   = loc;
     match->end   = end;
+    
+    if( literalPat->pat.binding && scope )
+        ss_mapPut( scope, literalPat->pat.binding, match );
     return match;
 }
 
