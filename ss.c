@@ -407,6 +407,7 @@ static ss_Pattern* ss_compileCompound( ss_Compiler* compiler ) {
     while( !isclosing( compiler->ch1 ) ) {
         if( isend( compiler->ch1 ) ) {
             compiler->ctx->error = "Unterminated pattern";
+            ss_release( oneOfList );
             return NULL;
         }
         
@@ -448,6 +449,7 @@ static ss_Pattern* ss_compileCompound( ss_Compiler* compiler ) {
     switch( open ) {
         case '(':
             compPat = ss_justOnePattern( oneOfPat );
+            ss_release( oneOfPat );
         break;
         case '{':
             compPat = ss_zeroOrMorePattern( oneOfPat );
@@ -619,7 +621,7 @@ ss_Match* ss_find( ss_Scanner* scanner ) {
         ss_mapCommit( scope );
         ss_release( scope );
         
-        scanner->stream.loc++;
+        scanner->stream.read( &scanner->stream );
     }
     
     if( !m )
@@ -756,13 +758,15 @@ static void growMap( ss_Map* map, unsigned cap ) {
         map->buf[i] = NULL;
     
     for( unsigned i = 0 ; i < ocap ; i++ ) {
-        ss_MapNode* node = obuf[i];
-        if( !node )
-            continue;
-        
-        unsigned j = node->hash % map->cap;
-        node->next = map->buf[j];
-        map->buf[j] = node;
+        ss_MapNode* it = obuf[i];
+        while( it ) {
+            ss_MapNode* node = it;
+            it = it->next;
+            
+            unsigned j = node->hash % map->cap;
+            node->next = map->buf[j];
+            map->buf[j] = node;
+        }
     }
     
     free( obuf );
@@ -1040,8 +1044,6 @@ typedef struct {
 static ss_Match* oneOfMatcher( ss_Pattern* p, ss_Map* scope, ss_Stream* stream ) {
     OneOfPattern* oneOfPat = (OneOfPattern*)p;
     
-    char const* loc = stream->loc;
-    
     ss_Iter*    it  = ss_listIter( oneOfPat->patterns );
     ss_Pattern* nxt = ss_iterNext( it );
     ss_Match*   sub = NULL;
@@ -1051,14 +1053,7 @@ static ss_Match* oneOfMatcher( ss_Pattern* p, ss_Map* scope, ss_Stream* stream )
         sub = nxt->match( nxt, scope, stream );
         if( sub ) {
             ss_release( it );
-            char const* end = stream->loc;
-    
-            ss_Match* mat = ss_alloc( sizeof(ss_Match), TYPE_MATCH );
-            mat->scope = ss_refer( scope );
-            mat->next  = NULL;
-            mat->loc   = loc;
-            mat->end   = end;
-            return mat;
+            return sub;
         }
         *stream = saved;
         ss_mapCancel( scope );
