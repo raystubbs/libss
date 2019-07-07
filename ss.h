@@ -9,9 +9,7 @@ typedef struct ss_Context ss_Context;
 
 typedef enum {
     ss_BYTES,
-    ss_UTF8,
-    ss_UTF16,
-    ss_UTF32
+    ss_CHARS
 } ss_Format;
 
 ss_Context* ss_init( void );

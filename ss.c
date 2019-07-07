@@ -140,19 +140,52 @@ static long readByte( ss_Stream* stream ) {
         return *(stream->loc++);
 }
 
-static long readUTF8( ss_Stream* stream ) {
-    assert( false );
-    return -1;
-}
-
-static long readUTF16( ss_Stream* stream ) {
-    assert( false );
-    return -1;
-}
-
-static long readUTF32( ss_Stream* stream ) {
-    assert( false );
-    return -1;
+#define isSingleChr( c ) ( (unsigned char)(c) >> 7 == 0  )
+#define isDoubleChr( c ) ( (unsigned char)(c) >> 5 == 6  )
+#define isTripleChr( c ) ( (unsigned char)(c) >> 4 == 14 )
+#define isQuadChr( c )   ( (unsigned char)(c) >> 3 == 30 )
+#define isAfterChr( c )  ( (unsigned char)(c) >> 6 == 2  )
+static long readChar( ss_Stream* stream ) {
+    
+    if( stream->loc == stream->end )
+        return -1;
+    
+    long code = 0;
+    int  byte = *( stream->loc++ );
+    int  size = 0;
+    if( isSingleChr( byte ) ) {
+        size = 1;
+        code = byte;
+    }
+    else
+    if( isDoubleChr( byte ) ) {
+        size = 2;
+        code = byte & 0x1F;
+    }
+    else
+    if( isTripleChr( byte ) ) {
+        size = 3;
+        code = byte & 0xF;
+    }
+    else
+    if( isQuadChr( byte ) ) {
+        size = 4;
+        code = byte & 0x7;
+    }
+    else {
+        stream->loc = stream->end;
+        return -1;
+    }
+    
+    for( int i = 1 ; i < size ; i++ ) {
+        if( stream->loc == stream->end )
+            return -1;
+        
+        byte = *( stream->loc++ );
+        code = ( code << 6 ) | ( byte & 0x3F );
+    }
+    
+    return code;
 }
 
 static ss_Stream ss_makeStream( ss_Format fmt, char const* loc, char const* end ) {
@@ -162,14 +195,8 @@ static ss_Stream ss_makeStream( ss_Format fmt, char const* loc, char const* end 
         case ss_BYTES:
             stream.read = readByte;
         break;
-        case ss_UTF8:
-            stream.read = readUTF8;
-        break;
-        case ss_UTF16:
-            stream.read = readUTF16;
-        break;
-        case ss_UTF32:
-            stream.read = readUTF32;
+        case ss_CHARS:
+            stream.read = readChar;
         break;
         default:
             assert( false );

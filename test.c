@@ -276,6 +276,26 @@ fail:
     return false;
 }
 
+static bool test14( void ) {
+    ss_Context* ctx = ss_init();
+    
+    char const* p = "( 20170 26085 12399 )";
+    bool result = testMatch( ctx, ss_CHARS, p, "今日は" );
+    
+    ss_release( ctx );
+    return result;
+}
+
+static bool test15( void ) {
+    ss_Context* ctx = ss_init();
+    
+    char const* p = "This is ( '(' )not( ')' ) very interesting.";
+    bool result = testMatch( ctx, ss_CHARS, p, "This is (not) very interesting." );
+    
+    ss_release( ctx );
+    return result;
+}
+
 int main( void ) {
     bool passing = true;
     
@@ -292,6 +312,8 @@ int main( void ) {
     passing &= test11();
     passing &= test12();
     passing &= test13();
+    passing &= test14();
+    passing &= test15();
     
     if( passing ) {
         printf( "PASSED\n" );
