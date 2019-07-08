@@ -26,7 +26,7 @@ and multiple sub-expressions can be given in sequence.
 These groups can also be divided into multiple alternatives via the <code>&vert;</code>
 delimiter.
 
-    "There are two ( 'apples' | 'oranges' )!" <= "There are two apples" <= "There are two oranges"
+    "There are two ( 'apples' | 'oranges' )!" <= "There are two apples!" <= "There are two oranges!"
 
 Alternatives within a grouping are given by order of priority, so unlike in regex, the
 first matching alternative in the sequence is accepted instead of the longest.
