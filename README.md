@@ -3,48 +3,72 @@ A simple string matching library suitable as a lightweight alternative
 to regex.  Supports matching against raw byte strings as well as UTF-8
 encoded character strings.
 
-The root level contents of a string are taken as plain text, and matched
-literally against the input string.  For example:
+The root level of a pattern string is taken as literal text.
 
-    "Hello, World!" <= "Hello, World!"
+    pattern "Hello, World!" matches:
+        - "Hello, World!"
 
-Actual variations in the pattern as enclosed in brackets.  With `(...)`
-denoting a single occurance of the pattern and `<...>` indicating at
-least one occurance up to as many as can be matched.
+A variable portion of the pattern must be given between brackets.
 
-    "Hello, ( 'World!' )" <= "Hello, World!"
-    "Hello, < 'World!' >" <= "Hello, World!" <= Hello, World! World!"
+    pattern "Hello, ( 'World' | 'Person' )!" matches:
+        - "Hello, World!"
+        - "Hello, Person!"
 
-Within bracketed groups, pattern syntax changes.  Instead of matching
-the text literally, a more structured syntax must be followed.  Literal
-text must be expressed as strings, quoted by either single, double, or
-back qoutes.  Whitespace is also ignored within these compound expressions,
-and multiple sub-expressions can be given in sequence.
+Within bracketed groups literal text must be quoted between single,
+double, or back quotes.  A vertical bar within bracketed groups
+separate alternative subpatterns that'll satisfy the grouping.  These
+are attempted in the order given, so rightmost alternatives have
+higher priority.
 
-    "This text is literal ( ', but ' 'this ' 'is ' 'not' )!" <= "This text is literal, but this is not!"
+The type of brackets around a pattern indicate the number of instances
+that can be matched.
 
-These groups can also be divided into multiple alternatives via the <code>&vert;</code>
-delimiter.
+- `(...)` match only once
+- `<...>` match one or more times
+- `[...]` match zero ore one times
+- `{...}` match zero or more times
 
-    "There are two ( 'apples' | 'oranges' )!" <= "There are two apples" <= "There are two oranges"
+Each type will match the maximum number of instances available in the
+appropriate location of the input text.
 
-Alternatives within a grouping are given by order of priority, so unlike in regex, the
-first matching alternative in the sequence is accepted instead of the longest.
+Named patterns can be references within bracket groups via standard
+identifiers.
 
-Two more grouping types are `[...]` which matches zero or one instance of its pattern
-and `{...}` which matches zero or more instances.  In addition the `~` prefix denotes
-a 'not next' pattern, which doesn't consume any characters, but only matches if the
-next sequence of characters doesn't match the given pattern.  The counterpart to this
-is the `^` prefix, which denotes a 'has next' pattern; only matching if the next
-sequence matches the pattern, but not consuming anything.
+    pattern "I ate <digit> tacos." matches:
+        - "I ate 1 tacos."
+        - "I ate 2 tacos."
+        - "I ate 50 tacos."
 
-Patterns can also be labeled to allow for easy retrieval of the boundaries of a
-subpattern match.  This is done with a label postfix:
+Specific character or byte codes can also be given as integer literals.
 
-    "There are two ( 'apples' | 'oranges' ):fruit!"
+    pattern "(72)ello, World(33)" matches:
+        - "Hello, World!"
 
-Specific character values can also be indicated with an integral literal, these
-match particular unicode characters or byte values, depending on encoding.
 
-    "(72)ello, World(33)"
+Any other subpattern can be preceeded with `^` or `~`.  A pattern given
+after a `^` is a lookahead pattern.  It doesn't advance the cursor when
+matched, and is just used to make sure something is true about the next
+input sequence.  A `~` also marks a lookahead pattern, but patterns marked
+with this must FAIL for the greater (parent) pattern to match.
 
+Subpatterns can also be labeled to make it easier to find their bounds
+within the input text.
+
+    pattern "I like ( 'tacos' | 'burritos' ):food." matches:
+        - "I like tacos." with food = 7:12
+        - "I like burritos." with food = 7:15
+
+Each instance of a particular pattern match has its own naming scope.
+
+    pattern "I < 'love ' >food." matches:
+        - "I love food." with food[0] = 2..6
+        - "I love love food." with food[0] = 2..6 and food[1] = 7..11
+
+This makes it a bit easier to match and keep track of the parts of
+multi-component patterns.
+
+To make libss a bit more friendly to globbing the compiler recognizes
+two special 'wildcard' characters: `*` and `?`.  These expand to the
+patterns `(splat)` and `(quark)` respectively.  These pattern names
+are undefined by default, so the user needs to define useful patterns
+under these names to make use of the wildcards.
