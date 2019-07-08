@@ -17,7 +17,7 @@ A variable portion of the pattern must be given between brackets.
 Within bracketed groups literal text must be quoted between single,
 double, or back quotes.  A vertical bar within bracketed groups
 separate alternative subpatterns that'll satisfy the grouping.  These
-are attempted in the order given, so rightmost alternatives have
+are attempted in the order given, so leftmost alternatives have
 higher priority.
 
 The type of brackets around a pattern indicate the number of instances
