@@ -24,7 +24,6 @@ struct ss_Pattern {
     ss_Matcher  match;
     ss_Cleaner  clean;
     char*       binding;
-    char        data[];
 };
 
 struct ss_Stream {
@@ -267,7 +266,7 @@ static bool isbreak( long ch1, long ch2 ) {
     }
     if( isopening( ch1 ) )
         return true;
-    if( ch1 == '*' || ch1 == '?' )
+    if( ch1 == '*' || ch1 == '?' || ch1 == '\\' )
         return true;
     
     return false;
@@ -324,6 +323,17 @@ static ss_Pattern* ss_compileString( ss_Compiler* compiler ) {
     ss_release( buf );
     
     return pat;
+}
+
+static ss_Pattern* ss_compileChar( ss_Compiler* compiler ) {
+    if( compiler->ch1 != '\\' )
+        return NULL;
+    ss_advance( compiler );
+    
+    long chr = compiler->ch1;
+    ss_advance( compiler );
+    
+    return ss_literalPattern( &chr, 1 );
 }
 
 static ss_Pattern* ss_compileCode( ss_Compiler* compiler ) {
@@ -478,16 +488,19 @@ static ss_Pattern* ss_compileCompound( ss_Compiler* compiler ) {
 static ss_Pattern* ss_compilePrimitive( ss_Compiler* compiler ) {
     ss_Pattern* pat = NULL;
     pat = ss_compileString( compiler );
-    if( pat || compiler->ctx->error )
+    if( pat )
+        goto parsed;
+    pat = ss_compileChar( compiler );
+    if( pat )
         goto parsed;
     pat = ss_compileCode( compiler );
-    if( pat || compiler->ctx->error)
+    if( pat )
         goto parsed;
     pat = ss_compileNamed( compiler );
-    if( pat || compiler->ctx->error )
+    if( pat )
         goto parsed;
     pat = ss_compileCompound( compiler );
-    if( pat || compiler->ctx->error )
+    if( pat )
         goto parsed;
     return NULL;
 
@@ -692,7 +705,7 @@ static void* xrealloc( void* ptr, size_t sz ) {
     return nptr;
 }
 
-#define ss_obj( PTR ) ((void*)(PTR) - (uintptr_t)&((ss_Object*)0)->data)
+#define ss_obj( PTR ) ((void*)(PTR) - sizeof(ss_Object))
 static void* ss_alloc( size_t sz, ss_Type type ) {
     ss_Object* obj = xmalloc( sizeof(ss_Object) + sz );
     obj->type = type;

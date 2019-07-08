@@ -69,6 +69,22 @@ Each instance of a particular pattern match has its own naming scope.
 This makes it a bit easier to match and keep track of the parts of
 multi-component patterns.
 
+Character literals are a shorter syntax for expressing a single character
+pattern, either within the root level text or a bracketed group.  These
+consist of a backslash <code>\</code> followed by a single character or
+byte, and can have a label attached like any other pattern.
+
+	pattern "This is \(not\) very interesting." matches:
+		- "This is (not) very interesting."
+
+Note that in C string literals the backslash is used as an escape character,
+so must itself be escaped.  Character literals are also useful for breaking
+a pattern's label between alphanumeric characters.
+
+	pattern "These are my ( 'dog' | 'cat' ):pet\s." matches:
+		- "These are my dogs."
+		- "These are my cats."
+
 To make libss a bit more friendly to globbing the compiler recognizes
 two special 'wildcard' characters: `*` and `?`.  These expand to the
 patterns `(splat)` and `(quark)` respectively.  These pattern names

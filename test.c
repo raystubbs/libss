@@ -317,8 +317,13 @@ static bool test14( void ) {
 static bool test15( void ) {
     ss_Context* ctx = ss_init();
     
-    char const* p = "This is ( '(' )not( ')' ) very interesting.";
-    bool result = testMatch( ctx, ss_CHARS, p, "This is (not) very interesting." );
+    bool result = true;
+    
+    char const* p1 = "This is ( '(' )not( ')' ) very interesting.";
+    result &= testMatch( ctx, ss_CHARS, p1, "This is (not) very interesting." );
+    
+    char const* p2 = "This is \\[not\\] very interesting.";
+    result &= testMatch( ctx, ss_CHARS, p2, "This is [not] very interesting." );
     
     ss_release( ctx );
     return result;
