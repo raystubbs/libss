@@ -60,9 +60,11 @@ within the input text.
 
 Each instance of a particular pattern match has its own naming scope.
 
-    pattern "I < 'love ':verb >food." matches:
-        - "I love food." with verb[0] = 2..6
-        - "I love love food." with verb[0] = 2..6 and verb[1] = 7..11
+    pattern "I ( { 'really':adverb ' ' }:g 'love':verb | `don't`:adverb ' ' 'like':verb ):verbal food." matches:
+        - "I love food." with verbal.verb = 2..6
+        - "I really love food." with verbal.g[0].adverb = 2..8, verbal.verb = 9..13
+        - "I really really love food." with with verbal.g[0].adverb = 2..8, verbal.g[1].adverb = 9..15, verbal.verb = 16..20
+        - "I don't like food." with verbal.adverb = 2..7, verbal.verb = 8..12
 
 This makes it a bit easier to match and keep track of the parts of
 multi-component patterns.
