@@ -17,8 +17,8 @@ typedef struct ss_Object   ss_Object;
 typedef enum   ss_Type     ss_Type;
 typedef struct ss_Compiler ss_Compiler;
 
-typedef ss_Match*  (*ss_Matcher)( ss_Pattern* pat, ss_Map* scope, ss_Stream* stream );
-typedef void       (*ss_Cleaner)( ss_Pattern* pat );
+typedef ss_Match*  (*ss_Matcher)( ss_Context* ctx, ss_Pattern* pat, ss_Map* scope, ss_Stream* stream );
+typedef void       (*ss_Cleaner)( ss_Context* ctx, ss_Pattern* pat );
 
 struct ss_Pattern {
     ss_Matcher  match;
@@ -30,12 +30,17 @@ struct ss_Stream {
     ss_Context* ctx;
     char const* loc;
     char const* end;
-    long       (*read)( ss_Stream* stream );
+    long       (*read)( ss_Context* ctx, ss_Stream* stream );
 };
 
 struct ss_Context {
     ss_Map*     patterns;
-    char const* error;
+    ss_Error    errnum;
+    char const* errmsg;
+    
+    size_t      tmpcap;
+    size_t      tmptop;
+    char const* tmpbuf;
 };
 
 struct ss_Scanner {
@@ -51,7 +56,6 @@ struct ss_Match {
 };
 
 struct ss_Compiler {
-    ss_Context* ctx;
     ss_List*    patterns;
     ss_Stream   stream;
     long        ch1;
@@ -79,67 +83,80 @@ struct ss_Object {
 
 /********************************* Prototypes *********************************/
 
-static void* xmalloc( size_t sz );
-static void* xcalloc( size_t nmem, size_t size );
-static void* xrealloc( void* ptr, size_t sz );
 
 static void* ss_alloc( size_t sz, ss_Type type );
 static void* ss_refer( void* ptr );
 static void  ss_free( void* ptr );
 
 static void ss_prelude( ss_Context* ctx );
+static void ss_error( ss_Context* ctx, ss_Error err, char const* fmt, ... );
 
-static ss_Map*  ss_mapNew( void );
-static void     ss_mapPut( ss_Map* map, char const* key, void* val );
-static void*    ss_mapGet( ss_Map* map, char const* key );
-static void     ss_mapCommit( ss_Map* map );
-static void     ss_mapCancel( ss_Map* map );
+static ss_Map*  ss_mapNew( ss_Context* ctx );
+static int      ss_mapPut( ss_Context* ctx, ss_Map* map, char const* key, void* val );
+static void*    ss_mapGet( ss_Context* ctx, ss_Map* map, char const* key );
+static int      ss_mapCommit( ss_Context* ctx, ss_Map* map );
+static void     ss_mapCancel( ss_Context* ctx, ss_Map* map );
 
-static ss_List* ss_listNew( void );
-static void     ss_listAdd( ss_List* list, void* val );
-static ss_Iter* ss_listIter( ss_List* list );
+static ss_List* ss_listNew( ss_Context* ctx );
+static int      ss_listAdd( ss_Context* ctx, ss_List* list, void* val );
+static ss_Iter* ss_listIter( ss_Context* ctx, ss_List* list );
 
-static void* ss_iterNext( ss_Iter* iter );
+static void* ss_iterNext( ss_Context* ctx, ss_Iter* iter );
 
-static ss_Buffer*  ss_bufferNew();
-static void        ss_bufferPut( ss_Buffer* buf, long ch );
-static long const* ss_bufferBuf( ss_Buffer* buf );
-static size_t      ss_bufferLen( ss_Buffer* buf );
+static ss_Buffer*  ss_bufferNew( ss_Context* ctx );
+static int         ss_bufferPut( ss_Context* ctx, ss_Buffer* buf, long ch );
+static long const* ss_bufferBuf( ss_Context* ctx, ss_Buffer* buf );
+static size_t      ss_bufferLen( ss_Context* ctx, ss_Buffer* buf );
 
-static ss_Pattern* ss_allOfPattern( ss_List* patterns );
-static ss_Pattern* ss_oneOfPattern( ss_List* patterns );
-static ss_Pattern* ss_hasNextPattern( ss_Pattern* pattern );
-static ss_Pattern* ss_notNextPattern( ss_Pattern* pattern );
-static ss_Pattern* ss_zeroOrOnePattern( ss_Pattern* pattern );
-static ss_Pattern* ss_zeroOrMorePattern( ss_Pattern* pattern );
-static ss_Pattern* ss_justOnePattern( ss_Pattern* pattern );
-static ss_Pattern* ss_oneOrMorePattern( ss_Pattern* pattern );
-static ss_Pattern* ss_literalPattern( long const* str, size_t len );
+static ss_Pattern* ss_allOfPattern( ss_Context* ctx, ss_List* patterns );
+static ss_Pattern* ss_oneOfPattern( ss_Context* ctx, ss_List* patterns );
+static ss_Pattern* ss_hasNextPattern( ss_Context* ctx, ss_Pattern* pattern );
+static ss_Pattern* ss_notNextPattern( ss_Context* ctx, ss_Pattern* pattern );
+static ss_Pattern* ss_zeroOrOnePattern( ss_Context* ctx, ss_Pattern* pattern );
+static ss_Pattern* ss_zeroOrMorePattern( ss_Context* ctx, ss_Pattern* pattern );
+static ss_Pattern* ss_justOnePattern( ss_Context* ctx, ss_Pattern* pattern );
+static ss_Pattern* ss_oneOrMorePattern( ss_Context* ctx, ss_Pattern* pattern );
+static ss_Pattern* ss_literalPattern( ss_Context* ctx, long const* str, size_t len );
 
 /****************************** Context Creation ******************************/
 ss_Context* ss_init( void ) {
     ss_Context* ctx = ss_alloc( sizeof(ss_Context), TYPE_CONTEXT );
+    if( !ctx )
+        return NULL;
+    
     ctx->patterns = ss_mapNew();
-    ctx->error    = NULL;
+    ctx->errnum   = ss_ERR_NONE;
+    ctx->errmsg   = NULL;
+    
+    ctx->tmpcap = 64;
+    ctx->tmptop = 0;
+    ctx->tmpbuf = malloc( 64 );
+    if( !ctx->tmpbuf ) {
+        ss_release( ctx );
+        ss_error( ctx, ss_ERR_ALLOC, NULL );
+        return NULL;
+    }
     
     ss_prelude( ctx );
     return ctx;
 }
 
-char const* ss_error( ss_Context* ctx ) {
-    return ctx->error;
-}
-
 static void freeContext( void* ptr ) {
     ss_Context* ctx = ptr;
-    ss_release( ctx->patterns );
+    if( ctx->pattern )
+        ss_release( ctx->patterns );
+    if( ctx->tmpbuf )
+        free( tmpbuf );
     ss_free( ctx );
 }
 
 /***************************** String Decoding ********************************/
-static long readByte( ss_Stream* stream ) {
+#define ss_STREAM_END (-1)
+#define ss_STREAM_ERR (-2)
+
+static long readByte( ss_Context* ctx, ss_Stream* stream ) {
     if( stream->loc == stream->end )
-        return -1;
+        return ss_STREAM_END;
     else
         return *(stream->loc++);
 }
@@ -149,10 +166,10 @@ static long readByte( ss_Stream* stream ) {
 #define isTripleChr( c ) ( (unsigned char)(c) >> 4 == 14 )
 #define isQuadChr( c )   ( (unsigned char)(c) >> 3 == 30 )
 #define isAfterChr( c )  ( (unsigned char)(c) >> 6 == 2  )
-static long readChar( ss_Stream* stream ) {
+static long readChar( ss_Context* ctx, ss_Stream* stream ) {
     
     if( stream->loc == stream->end )
-        return -1;
+        return ss_STREAM_END;
     
     long code = 0;
     int  byte = *( stream->loc++ );
@@ -177,13 +194,13 @@ static long readChar( ss_Stream* stream ) {
         code = byte & 0x7;
     }
     else {
-        stream->loc = stream->end;
-        return -1;
+        ss_error( ctx, "Input is corrupted or not formated as UTF-8" );
+        return ss_STREAM_ERROR;
     }
     
     for( int i = 1 ; i < size ; i++ ) {
         if( stream->loc == stream->end )
-            return -1;
+            return ss_STREAM_END;
         
         byte = *( stream->loc++ );
         code = ( code << 6 ) | ( byte & 0x3F );
@@ -210,31 +227,46 @@ static ss_Stream ss_makeStream( ss_Format fmt, char const* loc, char const* end 
 
 /********************************* Compilation ********************************/
 
-static void ss_advance( ss_Compiler* compiler ) {
+static int ss_advance( ss_Context* ctx, ss_Compiler* compiler ) {
     compiler->ch1 = compiler->ch2;
     compiler->ch2 = compiler->stream.read( &compiler->stream );
+    if( compiler->ch2 == ss_STREAM_ERR )
+        return ss_STREAM_ERR;
+    else
+        return 0;
 }
 
 static ss_Compiler* ss_compiler( ss_Context* ctx, ss_Format fmt, char const* str, size_t len ) {
     ss_Compiler* compiler = ss_alloc( sizeof(ss_Compiler), TYPE_COMPILER );
-    compiler->ctx      = ss_refer( ctx );
-    compiler->patterns = ss_listNew();
+    if( !compiler ) {
+        ss_error( ctx, ss_ERR_ALLOC, NULL );
+        return NULL;
+    }
+    
     compiler->stream   = ss_makeStream( fmt, str, str + len );
-    ss_advance( compiler );
-    ss_advance( compiler );
+    compiler->patterns = ss_listNew( ctx );
+    if( !compiler->patterns ) {
+        ss_release( compiler );
+        return NULL;
+    }
+    
+    if( ss_advance( ctx, compiler ) || ss_advance( ctx, compiler ) ) {
+        ss_release( compiler );
+        return NULL;
+    }
     return compiler;
 }
 
 static void freeCompiler( void* ptr ) {
     ss_Compiler* compiler = ptr;
-    ss_release( compiler->ctx );
-    ss_release( compiler->patterns );
+    if( compiler->patterns )
+        ss_release( compiler->patterns );
     ss_free( compiler );
 }
 
-static void ss_whitespace( ss_Compiler* compiler ) {
-    while( isspace( compiler->ch1 ) )
-        ss_advance( compiler );
+static void ss_whitespace( ss_Context* ctx, ss_Compiler* compiler ) {
+    while( isspace( compiler->ch1 ) && !ss_advance( ctx, compiler ) )
+        ;
 }
 
 
@@ -276,16 +308,27 @@ static bool isend( long ch ) {
   return ch < 0;
 }
 
-static ss_Pattern* ss_compileText( ss_Compiler* compiler ) {
-    if( compiler->ch1 == -1 )
+static ss_Pattern* ss_compileText( ss_Context* ctx, ss_Compiler* compiler ) {
+    if( compiler->ch1 == ss_STREAM_END )
         return NULL;
     if( isbreak( compiler->ch1, compiler->ch2 ) )
         return NULL;
-    ss_Buffer* buf = ss_bufferNew();
+    
+    ss_Buffer* buf = ss_bufferNew( ctx );
+    if( !buf )
+        return NULL;
+    
     while( !isbreak( compiler->ch1, compiler->ch2 ) && !isend( compiler->ch1 ) ) {
-        ss_bufferPut( buf, compiler->ch1 );
-        ss_advance( compiler );
+        if( ss_bufferPut( buf, compiler->ch1 ) ) {
+            ss_release( buf );
+            return NULL;
+        }
+        if( ss_advance( ctx, compiler ) {
+            ss_release( buf );
+            return NULL;
+        }
     }
+    
     long const* str = ss_bufferBuf( buf );
     size_t      len = ss_bufferLen( buf );
     ss_Pattern* pat = ss_literalPattern( str, len );
@@ -295,26 +338,41 @@ static ss_Pattern* ss_compileText( ss_Compiler* compiler ) {
     return pat;
 }
 
-static ss_Pattern* ss_compileString( ss_Compiler* compiler ) {
+static ss_Pattern* ss_compileString( ss_Context* ctx, ss_Compiler* compiler ) {
     long quote;
     if( compiler->ch1 == '"' || compiler->ch1 == '`' || compiler->ch1 == '\'' )
         quote = compiler->ch1;
     else
         return NULL;
     
-    ss_advance( compiler );
+    if( ss_advance( ctx, compiler ) )
+        return NULL;
     
-    ss_Buffer* buf = ss_bufferNew();
+    ss_Buffer* buf = ss_bufferNew( ctx );
+    if( !buf )
+        return NULL;
+    
     while( compiler->ch1 != quote ) {
         if( isend( compiler->ch1 ) ) {
-            compiler->ctx->error = "Unterminated string";
+            ss_error( ctx, "Unterminated string" );
             ss_release( buf );
             return NULL;
         }
-        ss_bufferPut( buf, compiler->ch1 );
-        ss_advance( compiler );
+        if( ss_bufferPut( buf, compiler->ch1 ) ) {
+            ss_release( buf );
+            return NULL;
+        }
+        
+        if( ss_advance( ctx, compiler ) ) {
+            ss_release( buf );
+            return NULL;
+        }
     }
-    ss_advance( compiler );
+    
+    if( ss_advance( ctx, compiler ) ) {
+        ss_release( buf );
+        return NULL;
+    }
     
     long const* str = ss_bufferBuf( buf );
     size_t      len = ss_bufferLen( buf );
@@ -325,51 +383,61 @@ static ss_Pattern* ss_compileString( ss_Compiler* compiler ) {
     return pat;
 }
 
-static ss_Pattern* ss_compileChar( ss_Compiler* compiler ) {
+static ss_Pattern* ss_compileChar( ss_Context* ctx, ss_Compiler* compiler ) {
     if( compiler->ch1 != '\\' )
         return NULL;
-    ss_advance( compiler );
+    if( ss_advance( ctx, compiler ) )
+        return NULL;
     
     long chr = compiler->ch1;
-    ss_advance( compiler );
+    
+    if( ss_advance( ctx, compiler ) )
+        return NULL;
     
     return ss_literalPattern( &chr, 1 );
 }
 
-static ss_Pattern* ss_compileCode( ss_Compiler* compiler ) {
+static ss_Pattern* ss_compileCode( ss_Context* ctx, ss_Compiler* compiler ) {
     if( !isdigit( compiler->ch1 ) )
         return NULL;
     
     long code = 0;
     while( isalnum( compiler->ch1 ) ) {
         if( !isdigit( compiler->ch1 ) ) {
-            compiler->ctx->error = "Non-digit at end of character code";
+            ss_error( ctx, ss_ERR_SYNTAX, "Non-digit at end of character code" );
             return NULL;
         }
         code = code*10 + (compiler->ch1 - '0');
-        ss_advance( compiler );
+        
+        if( ss_advance( ctx, compiler ) )
+            return NULL;
     }
     
     return ss_literalPattern( &code, 1 );
 }
 
-static char const* parseName( ss_Compiler* compiler ) {
-    static char buf[64];
-    int top = 0;
+static char const* parseName( ss_Context* ctx, ss_Compiler* compiler ) {
+    ctx->tmptop = 0;
     
     while( compiler->ch1 == '_' || isalnum( compiler->ch1 ) ) {
-        if( top >= sizeof(buf) - 1 ) {
-            compiler->ctx->error = "Identifier too large";
-            return NULL;
+        if( ctx->tmptop >= ctx->tmpcap - 1 ) {
+            void* rep = realloc( ctx->tmpbuf );
+            if( !rep ) {
+                ss_error( ctx, ss_ERR_ALLOC, NULL );
+                return NULL;
+            }
+            ctx->tmpbuf = rep;
         }
-        buf[top++] = (char)compiler->ch1;
-        ss_advance( compiler );
+        
+        ctx->tmpbuf[ctx->tmptop++] = (char)compiler->ch1;
+        if( ss_advance( ctx, compiler ) )
+            return NULL;
     }
-    buf[top] = '\0';
+    ctx->tmpbuf[ctx->tmptop++] = '\0';
     return buf;
 }
 
-static ss_Pattern* ss_compileNamed( ss_Compiler* compiler ) {
+static ss_Pattern* ss_compileNamed( ss_Context* ctx, ss_Compiler* compiler ) {
     if( !isalpha( compiler->ch1 ) && compiler->ch1 != '_' && compiler->ch1 != '*' && compiler->ch1 != '?' )
         return NULL;
     
@@ -377,24 +445,24 @@ static ss_Pattern* ss_compileNamed( ss_Compiler* compiler ) {
     char const* name = NULL;
     if( compiler->ch1 == '*' ) {
         name = "splat";
-        ss_advance( compiler );
+        if( ss_advance( ctx, compiler ) )
+            return NULL;
     }
     else
     if( compiler->ch1 == '?' ) {
         name = "quark";
-        ss_advance( compiler );
+        if( ss_advance( ctx, compiler ) )
+            return NULL;
     }
     else {
         name = parseName( compiler );
-    }
-    if( !name ) {
-        compiler->ctx->error = "Invalid pattern name";
-        return NULL;
+        if( !name )
+            return NULL;
     }
     
     ss_Pattern* pat = ss_mapGet( compiler->ctx->patterns, name );
     if( !pat ) {
-        compiler->ctx->error = "Undefined pattern name";
+        ss_error( ctx, ss_ERR_ALLOC, NULL );
         return NULL;
     }
     return ss_refer( pat );
@@ -415,13 +483,13 @@ static ss_Pattern* ss_compileCompound( ss_Compiler* compiler ) {
     else
         return NULL;
     
-    ss_advance( compiler );
-    ss_whitespace( compiler );
+    if( ss_advance( compiler ) || ss_whitespace( compiler ) )
+        return NULL;
     
     ss_List* oneOfList = ss_listNew();
     while( !isclosing( compiler->ch1 ) ) {
         if( isend( compiler->ch1 ) ) {
-            compiler->ctx->error = "Unterminated pattern";
+            ss_error( ctx, ss_ERR_SYNTAX, "Unterminated pattern" );
             ss_release( oneOfList );
             return NULL;
         }
@@ -430,8 +498,8 @@ static ss_Pattern* ss_compileCompound( ss_Compiler* compiler ) {
         do {
             ss_Pattern* pat = ss_compilePattern( compiler );
             if( !pat ) {
-                if( !compiler->ctx->error )
-                    compiler->ctx->error = "Expected sub-pattern";
+                if( !ctx->errnum )
+                    ss_error( ctx, ss_ERR_SYNTAX, "Expected sub-pattern" );
                 ss_release( oneOfList );
                 ss_release( allOfList );
                 return NULL;

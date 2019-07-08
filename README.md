@@ -71,7 +71,7 @@ multi-component patterns.
 
 Character literals are a shorter syntax for expressing a single character
 pattern, either within the root level text or a bracketed group.  These
-consist of a backslash <code>\</code> followed by a single character or
+consist of a backslash `\\` followed by a single character or
 byte, and can have a label attached like any other pattern.
 
 	pattern "This is \(not\) very interesting." matches:
