@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <stdio.h>
 
 /********************************* Core Types *********************************/
 typedef struct ss_Map      ss_Map;
@@ -78,6 +79,10 @@ struct ss_Object {
 };
 
 /********************************* Prototypes *********************************/
+
+static void* xmalloc( size_t sz );
+static void* xcalloc( size_t nmem, size_t size );
+static void* xrealloc( void* ptr, size_t sz );
 
 static void* ss_alloc( size_t sz, ss_Type type );
 static void* ss_refer( void* ptr );
@@ -501,7 +506,7 @@ parsed:
     }
     
     size_t len = strlen( binding );
-    char*  cpy = malloc( len + 1 );
+    char*  cpy = xmalloc( len + 1 );
     strcpy( cpy, binding );
     pat->binding = cpy;
     return pat;
@@ -659,10 +664,37 @@ static void freeScanner( void* ptr ) {
 }
 
 /****************************** Object Allocation *****************************/
+static void* xmalloc( size_t sz ) {
+    void* ptr = malloc( sz );
+    if( !ptr ) {
+        fprintf( stderr, "Allocation error\n" );
+        abort();
+    }
+    
+    return ptr;
+}
+
+static void* xcalloc( size_t nmem, size_t size ) {
+    void* ptr = calloc( nmem, size );
+    if( !ptr ) {
+        fprintf( stderr, "Allocation error\n" );
+        abort();
+    }
+    return ptr;
+}
+static void* xrealloc( void* ptr, size_t sz ) {
+    void* nptr = realloc( ptr, sz );
+    if( !nptr ) {
+        free( nptr );
+        fprintf( stderr, "Allocation error\n" );
+        abort();
+    }
+    return nptr;
+}
 
 #define ss_obj( PTR ) ((void*)(PTR) - (uintptr_t)((ss_Object*)0)->data)
 static void* ss_alloc( size_t sz, ss_Type type ) {
-    ss_Object* obj = malloc( sizeof(ss_Object) + sz );
+    ss_Object* obj = xmalloc( sizeof(ss_Object) + sz );
     obj->type = type;
     obj->refc = 1;
     return obj->data;
@@ -732,7 +764,7 @@ static ss_Map* ss_mapNew( void ) {
     ss_Map* map = ss_alloc( sizeof(ss_Map), TYPE_MAP );
     map->cap = 21;
     map->cnt = 0;
-    map->buf = calloc( map->cap, sizeof(ss_MapNode*) );
+    map->buf = xcalloc( map->cap, sizeof(ss_MapNode*) );
     map->staged = NULL;
     
     return map;
@@ -750,7 +782,7 @@ static void growMap( ss_Map* map, unsigned cap ) {
     ss_MapNode** obuf = map->buf;
     
     map->cap = cap;
-    map->buf = calloc( map->cap, sizeof(ss_MapNode*) );
+    map->buf = xcalloc( map->cap, sizeof(ss_MapNode*) );
     
     for( unsigned i = 0 ; i < ocap ; i++ ) {
         ss_MapNode* it = obuf[i];
@@ -771,7 +803,7 @@ static void ss_mapPut( ss_Map* map, char const* key, void* val ) {
     unsigned h = hash( key );
 
     size_t keyLen = strlen( key );
-    ss_MapNode* node = malloc( sizeof(ss_MapNode) + keyLen + 1 );
+    ss_MapNode* node = xmalloc( sizeof(ss_MapNode) + keyLen + 1 );
     node->next  = map->staged;
     node->hash  = h;
     node->value = ss_refer( val );
@@ -869,7 +901,7 @@ static ss_List* ss_listNew( void ) {
 }
 
 static void ss_listAdd( ss_List* list, void* val ) {
-    ss_ListNode* node = malloc( sizeof(ss_ListNode) );
+    ss_ListNode* node = xmalloc( sizeof(ss_ListNode) );
     node->value = ss_refer( val );
     node->next  = NULL;
     
@@ -937,14 +969,14 @@ static ss_Buffer* ss_bufferNew( void ) {
     ss_Buffer* buf = ss_alloc( sizeof(ss_Buffer), TYPE_BUFFER );
     buf->cap = 16;
     buf->top = 0;
-    buf->buf = malloc( sizeof(long)*buf->cap );
+    buf->buf = xmalloc( sizeof(long)*buf->cap );
     return buf;
 }
 
 static void ss_bufferPut( ss_Buffer* buf, long ch ) {
     if( buf->top >= buf->cap ) {
         buf->cap *= 2;
-        buf->buf = realloc( buf->buf, sizeof(long)*buf->cap );
+        buf->buf = xrealloc( buf->buf, sizeof(long)*buf->cap );
     }
     buf->buf[buf->top++] = ch;
 }
