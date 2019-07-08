@@ -496,9 +496,6 @@ static ss_Pattern* ss_compilePrimitive( ss_Compiler* compiler ) {
     pat = ss_compileCode( compiler );
     if( pat )
         goto parsed;
-    pat = ss_compileNamed( compiler );
-    if( pat )
-        goto parsed;
     pat = ss_compileCompound( compiler );
     if( pat )
         goto parsed;
@@ -567,6 +564,9 @@ static ss_Pattern* ss_compilePattern( ss_Compiler* compiler ) {
     if( pat || compiler->ctx->error )
         return pat;
     pat = ss_compileHasNext( compiler );
+    if( pat || compiler->ctx->error )
+        return pat;
+    pat = ss_compileNamed( compiler );
     if( pat || compiler->ctx->error )
         return pat;
     return NULL;
