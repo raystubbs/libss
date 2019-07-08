@@ -28,8 +28,12 @@ that can be matched.
 - `[...]` match zero ore one times
 - `{...}` match zero or more times
 
+<<<<<<< HEAD
 Each type will match the maximum number of instances available in the
 appropriate location of the input text.
+=======
+    "There are two ( 'apples' | 'oranges' )!" <= "There are two apples!" <= "There are two oranges!"
+>>>>>>> 3658efdd75e7e68624703d5e83bdae48ac0ca73a
 
 Named patterns can be references within bracket groups via standard
 identifiers.

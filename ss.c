@@ -732,11 +732,8 @@ static ss_Map* ss_mapNew( void ) {
     ss_Map* map = ss_alloc( sizeof(ss_Map), TYPE_MAP );
     map->cap = 21;
     map->cnt = 0;
-    map->buf = malloc( sizeof(ss_MapNode*)*map->cap );
+    map->buf = calloc( map->cap, sizeof(ss_MapNode*) );
     map->staged = NULL;
-    
-    for( unsigned i = 0 ; i < map->cap ; i++ )
-        map->buf[i] = NULL;
     
     return map;
 }
@@ -753,9 +750,7 @@ static void growMap( ss_Map* map, unsigned cap ) {
     ss_MapNode** obuf = map->buf;
     
     map->cap = cap;
-    map->buf = malloc( sizeof(ss_MapNode*)*map->cap );
-    for( unsigned i = 0 ; i < map->cap ; i++ )
-        map->buf[i] = NULL;
+    map->buf = calloc( map->cap, sizeof(ss_MapNode*) );
     
     for( unsigned i = 0 ; i < ocap ; i++ ) {
         ss_MapNode* it = obuf[i];
