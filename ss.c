@@ -692,7 +692,7 @@ static void* xrealloc( void* ptr, size_t sz ) {
     return nptr;
 }
 
-#define ss_obj( PTR ) ((void*)(PTR) - (uintptr_t)((ss_Object*)0)->data)
+#define ss_obj( PTR ) ((void*)(PTR) - (uintptr_t)&((ss_Object*)0)->data)
 static void* ss_alloc( size_t sz, ss_Type type ) {
     ss_Object* obj = xmalloc( sizeof(ss_Object) + sz );
     obj->type = type;
